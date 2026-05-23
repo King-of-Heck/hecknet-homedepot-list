@@ -1,5 +1,5 @@
 """
-HeckNet_HomeDepot_1_1.py
+HeckNet_HomeDepot_1_2.py
 Discord bot that watches a single channel for homedepot.ca product links.
 When you type !print it scrapes all buffered links and prints a receipt:
 
@@ -123,32 +123,39 @@ async def scrape_product(url: str) -> dict:
     if not sku:
         return result
 
-    try:
-        api_url = HD_API_URL.format(sku=sku, store=HD_STORE_ID)
-        resp = requests.get(api_url, headers=HD_HEADERS, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
+    for attempt in range(3):
+        try:
+            api_url = HD_API_URL.format(sku=sku, store=HD_STORE_ID)
+            resp = requests.get(api_url, headers=HD_HEADERS, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
 
-        aisle_bay = data.get("aisleBay", {})
-        if aisle_bay:
-            result["aisle"] = aisle_bay.get("aisleLocation")
-            result["bay"]   = aisle_bay.get("bayLocation")
+            aisle_bay = data.get("aisleBay", {})
+            if aisle_bay:
+                result["aisle"] = aisle_bay.get("aisleLocation")
+                result["bay"]   = aisle_bay.get("bayLocation")
 
-        name_url = HD_NAME_URL.format(sku=sku)
-        resp2 = requests.get(name_url, headers=HD_HEADERS, timeout=15)
-        if resp2.ok:
-            data2 = resp2.json()
-            name = (
-                data2.get("name")
-                or data2.get("productName")
-                or (data2.get("summary", {}) or {}).get("name")
-                or (data2.get("product", {}) or {}).get("name")
-            )
-            if name:
-                result["name"] = name
+            name_url = HD_NAME_URL.format(sku=sku)
+            resp2 = requests.get(name_url, headers=HD_HEADERS, timeout=20)
+            if resp2.ok:
+                data2 = resp2.json()
+                name = (
+                    data2.get("name")
+                    or data2.get("productName")
+                    or (data2.get("summary", {}) or {}).get("name")
+                    or (data2.get("product", {}) or {}).get("name")
+                )
+                if name:
+                    result["name"] = name
 
-    except Exception as e:
-        print(f"API error for SKU {sku}: {e}")
+            break   # success — no more retries needed
+
+        except Exception as e:
+            if attempt < 2:
+                print(f"API attempt {attempt + 1} failed for SKU {sku}: {e} — retrying...")
+                await asyncio.sleep(3)
+            else:
+                print(f"API error for SKU {sku} after 3 attempts: {e}")
 
     return result
 
