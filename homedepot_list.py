@@ -83,6 +83,8 @@ HD_URL_RE = re.compile(
 async def scrape_product(url: str) -> dict:
     """
     Scrape a homedepot.ca product page with Playwright.
+    Intercepts XHR/fetch responses to find aisle/bay data from the
+    internal API call the page makes after load.
     Returns a dict with keys: name, sku, aisle, bay.
     Missing fields are None.
     """
@@ -109,16 +111,53 @@ async def scrape_product(url: str) -> dict:
                     "Chrome/124.0.0.0 Safari/537.36"
                 )
             )
+
+            await context.add_cookies([{
+                "name":   "THD_STORE_INFO",
+                "value":  f"storeNumber={HD_STORE_ID}",
+                "domain": ".homedepot.ca",
+                "path":   "/",
+            }, {
+                "name":   "THD_PERSIST",
+                "value":  f"C4%3D{HD_STORE_ID}",
+                "domain": ".homedepot.ca",
+                "path":   "/",
+            }, {
+                "name":   "userSelectedStore",
+                "value":  HD_STORE_ID,
+                "domain": ".homedepot.ca",
+                "path":   "/",
+            }, {
+                "name":   "storeNumber",
+                "value":  HD_STORE_ID,
+                "domain": ".homedepot.ca",
+                "path":   "/",
+            }])
+
             page = await context.new_page()
+
+            api_data: dict = {}
+
+            async def handle_response(response):
+                try:
+                    ct = response.headers.get("content-type", "")
+                    if "json" not in ct:
+                        return
+                    body = await response.json()
+                    body_str = str(body)
+                    if any(k in body_str.lower() for k in ["aisle", "bay", "location", "storesku"]):
+                        _extract_location(body, api_data)
+                except Exception:
+                    pass
+
+            page.on("response", handle_response)
 
             await page.goto(url, wait_until="networkidle", timeout=45000)
 
-            for selector in [
-                "h1.product-title",
-                "h1[class*='product']",
-                "h1[class*='title']",
-                "h1",
-            ]:
+            await page.wait_for_timeout(3000)
+
+            for selector in ["h1.product-title", "h1[class*='product']",
+                             "h1[class*='title']", "h1"]:
                 el = await page.query_selector(selector)
                 if el:
                     text = (await el.inner_text()).strip()
@@ -126,14 +165,8 @@ async def scrape_product(url: str) -> dict:
                         result["name"] = text
                         break
 
-            # SKU
-            # Try common SKU selectors; fall back to URL value
-            for selector in [
-                "[class*='sku']",
-                "[data-testid*='sku']",
-                "[class*='product-number']",
-                "[class*='item-number']",
-            ]:
+            for selector in ["[class*='sku']", "[data-testid*='sku']",
+                             "[class*='product-number']", "[class*='item-number']"]:
                 el = await page.query_selector(selector)
                 if el:
                     text = (await el.inner_text()).strip()
@@ -142,15 +175,24 @@ async def scrape_product(url: str) -> dict:
                         result["sku"] = digits
                         break
 
-            # Aisle / Bay
-            # Home Depot CA renders aisle/bay as text near "Aisle" or "Bay" labels
-            full_text = await page.inner_text("body")
-            aisle_m = re.search(r"Aisle\s*[:\-]?\s*([A-Z0-9]+)", full_text, re.IGNORECASE)
-            bay_m   = re.search(r"Bay\s*[:\-]?\s*([A-Z0-9]+)",   full_text, re.IGNORECASE)
-            if aisle_m:
-                result["aisle"] = aisle_m.group(1)
-            if bay_m:
-                result["bay"] = bay_m.group(1)
+            if api_data.get("aisle"):
+                result["aisle"] = api_data["aisle"]
+            if api_data.get("bay"):
+                result["bay"] = api_data["bay"]
+
+            if not result["aisle"] or not result["bay"]:
+                full_text = await page.inner_text("body")
+
+                for line in full_text.splitlines():
+                    if any(k in line.lower() for k in ["aisle", "bay"]):
+                        print(f"Page text match: {line.strip()[:120]}")
+
+                aisle_m = re.search(r"Aisle\s*[:\-]?\s*([A-Z0-9]+)", full_text, re.IGNORECASE)
+                bay_m   = re.search(r"Bay\s*[:\-]?\s*([A-Z0-9]+)",   full_text, re.IGNORECASE)
+                if aisle_m and not result["aisle"]:
+                    result["aisle"] = aisle_m.group(1)
+                if bay_m and not result["bay"]:
+                    result["bay"] = bay_m.group(1)
 
             await browser.close()
 
@@ -158,6 +200,24 @@ async def scrape_product(url: str) -> dict:
         print(f"Scrape error for {url}: {e}")
 
     return result
+
+
+def _extract_location(obj, out: dict, depth: int = 0):
+    """Recursively walk a JSON object looking for aisle/bay values."""
+    if depth > 10:
+        return
+    if isinstance(obj, dict):
+        for key, val in obj.items():
+            key_l = key.lower()
+            if key_l in ("aisle", "aisleno", "aislenumber") and val and not out.get("aisle"):
+                out["aisle"] = str(val)
+            elif key_l in ("bay", "bayno", "baynumber") and val and not out.get("bay"):
+                out["bay"] = str(val)
+            else:
+                _extract_location(val, out, depth + 1)
+    elif isinstance(obj, list):
+        for item in obj:
+            _extract_location(item, out, depth + 1)
 
 
 def word_wrap(text: str, font, max_width: int) -> list[str]:
