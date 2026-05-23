@@ -1,5 +1,5 @@
 """
-HeckNet_HomeDepot_1_3.py
+HeckNet_HomeDepot_1_4.py
 Discord bot that watches a single channel for homedepot.ca product links.
 When you type !print it scrapes all buffered links and prints a receipt:
 
@@ -104,6 +104,8 @@ HD_NAME_URL = "https://www.homedepot.ca/api/productsvc/v1/products/{sku}?lang=en
 async def scrape_product(url: str) -> dict:
     """
     Fetch product info from homedepot.ca's internal API.
+    All HTTP calls run in a thread executor so they never block the
+    Discord event loop (which would kill the gateway heartbeat).
     Returns a dict with keys: name, sku, aisle, bay.
     Missing fields are None.
     """
@@ -123,10 +125,16 @@ async def scrape_product(url: str) -> dict:
     if not sku:
         return result
 
+    def _fetch(url_to_fetch):
+        """Blocking HTTP GET — runs in a thread via run_in_executor."""
+        return requests.get(url_to_fetch, headers=HD_HEADERS, timeout=20)
+
+    loop = asyncio.get_event_loop()
+
     for attempt in range(3):
         try:
             api_url = HD_API_URL.format(sku=sku, store=HD_STORE_ID)
-            resp = requests.get(api_url, headers=HD_HEADERS, timeout=20)
+            resp = await loop.run_in_executor(None, _fetch, api_url)
             resp.raise_for_status()
             data = resp.json()
 
@@ -136,7 +144,7 @@ async def scrape_product(url: str) -> dict:
                 result["bay"]   = aisle_bay.get("bayLocation")
 
             name_url = HD_NAME_URL.format(sku=sku)
-            resp2 = requests.get(name_url, headers=HD_HEADERS, timeout=20)
+            resp2 = await loop.run_in_executor(None, _fetch, name_url)
             if resp2.ok:
                 data2 = resp2.json()
                 name = (
