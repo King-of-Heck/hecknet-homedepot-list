@@ -1,5 +1,5 @@
 """
-HeckNet_HomeDepot_1_2.py
+HeckNet_HomeDepot_1_3.py
 Discord bot that watches a single channel for homedepot.ca product links.
 When you type !print it scrapes all buffered links and prints a receipt:
 
@@ -325,7 +325,9 @@ async def on_message(message: discord.Message):
 
         async def scrape_and_print():
             products = []
-            for url in urls:
+            for i, url in enumerate(urls):
+                if i > 0:
+                    await asyncio.sleep(2)   # pause between requests to avoid rate limiting
                 print(f"Scraping: {url}")
                 product = await scrape_product(url)
                 products.append(product)
