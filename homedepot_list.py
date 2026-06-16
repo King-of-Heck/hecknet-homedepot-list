@@ -16,6 +16,9 @@ Links pasted without !print are silently buffered (bot reacts 🛒).
 Uses homedepot.ca's internal product API directly — no Playwright needed.
 """
 
+import sys
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import asyncio
 import re
 import io
