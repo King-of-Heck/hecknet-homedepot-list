@@ -75,12 +75,6 @@ HD_URL_RE = re.compile(
     re.IGNORECASE
 )
 
-
-HD_URL_RE = re.compile(
-    r"https?://(?:www\.)?homedepot\.ca/product/[^/]+/(\d+)",
-    re.IGNORECASE
-)
-
 HD_API_URL = "https://www.homedepot.ca/api/productsvc/v1/products/{sku}/store/{store}?fields=BASIC_SPA&lang=en"
 
 HD_HEADERS = {
