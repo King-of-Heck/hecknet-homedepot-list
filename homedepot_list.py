@@ -1,19 +1,11 @@
 """
-HeckNet_HomeDepot_1_4.py
-Discord bot that watches a single channel for homedepot.ca product links.
-When you type !print it scrapes all buffered links and prints a receipt:
+Home Depot shopping list printer.
 
-    💀 HeckNet 💀
-    Home Depot List
-    Friday, May 22 2026  @ 21:09
-    • DEWALT 5/8 in. x 50 ft. Water Hose
-      SKU: 1001833572
-      Aisle: 25  Bay: 029
-    • ...
+Watches a Discord channel for homedepot.ca product links and buffers them
+silently. Typing !print looks each one up against the store's product API and
+prints a list with the product name, SKU, aisle and bay.
 
-Links pasted without !print are silently buffered (bot reacts 🛒).
-!print with no buffered links reacts ❓ and does nothing.
-Uses homedepot.ca's internal product API directly — no Playwright needed.
+    python homedepot_list.py
 """
 
 import sys
