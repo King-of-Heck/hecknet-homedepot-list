@@ -31,7 +31,7 @@ FONT_BOLD    = "courbd.ttf"
 
 # Your local Home Depot store ID — used for aisle/bay lookups.
 # Find it in the URL when you select a store on homedepot.ca (e.g. storeId=7145).
-HD_STORE_ID  = "7080"
+HD_STORE_ID  = "YOUR_STORE_ID_HERE"
 
 
 PRINTER_DPI  = 203
@@ -365,5 +365,8 @@ if __name__ == "__main__":
         exit(1)
     if HOME_DEPOT_CHANNEL == 0:
         print("Paste your channel ID into HOME_DEPOT_CHANNEL at the top of the file!")
+        exit(1)
+    if HD_STORE_ID == "YOUR_STORE_ID_HERE":
+        print("Paste your store ID into HD_STORE_ID at the top of the file!")
         exit(1)
     client.run(DISCORD_TOKEN)
